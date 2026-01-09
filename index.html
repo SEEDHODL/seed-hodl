@@ -1,13 +1,423 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SEED HODL Protocol</title>
-  </head>
-  <body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FUMO | ZEN PROTOCOL</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;800&family=JetBrains+Mono:wght@300;400&family=Inter:wght@700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mincho: ['Shippori Mincho', 'serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'chart-green': '#22c55e',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+    <style>
+        /* 100dvh ensures full height on mobile browsers */
+        body, html {
+            background-color: #FAFAFA;
+            color: #111;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100dvh; 
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        /* Loading Screen */
+        #static-loader {
+            position: fixed; inset: 0; background: #FAFAFA; z-index: 9999;
+            display: flex; justify-content: center; align-items: center;
+            font-family: monospace; font-size: 10px; letter-spacing: 0.2em; color: #999;
+            transition: opacity 0.5s ease-out;
+            pointer-events: none;
+        }
+        .loaded #static-loader { opacity: 0; }
+
+        /* Glitch */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .glitch-active {
+            animation: shake 0.15s cubic-bezier(.36,.07,.19,.97) both;
+            text-shadow: 3px 0 #ff0000, -3px 0 #22c55e;
+        }
+        .invert-mode {
+            filter: invert(100%);
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="static-loader">SYSTEM INITIALIZING...</div>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // --- 🛡️ ROBUST AUDIO ENGINE ---
+        let audioCtx = null;
+        let lastSoundTime = 0;
+        const playSound = (type) => {
+            const now = Date.now();
+            if (now - lastSoundTime < 50) return;
+            lastSoundTime = now;
+            try {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const t = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'tick') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(1200 + Math.random() * 600, t);
+                    gain.gain.setValueAtTime(0.005, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+                    osc.start(t);
+                    osc.stop(t + 0.05);
+                } else if (type === 'switch') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(150, t);
+                    gain.gain.setValueAtTime(0.05, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+                    osc.start(t);
+                    osc.stop(t + 0.3);
+                } else if (type === 'glitch') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(60, t);
+                    gain.gain.setValueAtTime(0.05, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                    osc.start(t);
+                    osc.stop(t + 0.1);
+                } else if (type === 'complete') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, t);
+                    osc.frequency.exponentialRampToValueAtTime(880, t + 1);
+                    gain.gain.setValueAtTime(0.1, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 3);
+                    osc.start(t);
+                    osc.stop(t + 3);
+                }
+            } catch(e) {}
+        };
+
+        // --- 📊 DATA ---
+        const MODES = {
+            LEGENDS: { id: 'LEGENDS', label: 'LEGENDS / 投資の神髄', timerLabel: { jp: '知恵を得るまで', en: 'UNTIL WISDOM' }, words: [
+                { jp: "ルール1：損をするな。", en: "RULE 1: NEVER LOSE" }, { jp: "悲観の中で買い、楽観で売れ。", en: "BUY THE BLOOD" },
+                { jp: "休むことも相場だ。", en: "SITTING IS MONEY" }, { jp: "相場は常に正しい。", en: "MARKET IS NEVER WRONG" },
+                { jp: "卵を一つのカゴに盛るな。", en: "DIVERSIFY" }, { jp: "噂で買って、事実で売れ。", en: "BUY RUMOR, SELL FACT" },
+                { jp: "強気相場は悲観の中で生まれる。", en: "BULLS BORN IN GLOOM" }, { jp: "落ちるナイフを掴むな。", en: "DONT CATCH KNIVES" },
+                { jp: "利食い千人力。", en: "PROFIT IS PROFIT" }, { jp: "木を見て森を見ず。", en: "SEE THE FOREST" },
+                { jp: "人の行く裏に道あり。", en: "BE CONTRARIAN" }, { jp: "頭と尻尾はくれてやれ。", en: "NO GREED" },
+                { jp: "価格は支払うもの、価値は得るもの。", en: "PRICE IS WHAT YOU PAY" }, { jp: "稲妻が輝く瞬間に市場にいろ。", en: "TIME IN THE MARKET" },
+                { jp: "理解できないものに投資するな。", en: "KNOW WHAT YOU OWN" }, { jp: "他人が強欲な時に恐れよ。", en: "FEAR WHEN OTHERS GREEDY" },
+                { jp: "予測するな、準備せよ。", en: "DONT PREDICT, PREPARE" }, { jp: "市場は短期的には投票機だ。", en: "MARKET IS VOTING MACHINE" },
+                { jp: "長期的には計量器である。", en: "LONG TERM IS WEIGHING" }, { jp: "損切りは素早く。", en: "CUT LOSSES FAST" },
+                { jp: "利益は伸ばせ。", en: "LET PROFITS RUN" }
+            ]},
+            FOMO: { id: 'FOMO', label: 'ANTI-FOMO / 高値掴み防止', timerLabel: { jp: '正気に戻るまで', en: 'UNTIL SANITY' }, words: [
+                { jp: "高値掴みは才能。", en: "TOP BUYER TALENT" }, { jp: "また養分になる気か？", en: "EXIT LIQUIDITY?" },
+                { jp: "靴磨きの少年を見ろ。", en: "SIGNAL IS OUT" }, { jp: "JOMOを知れ。", en: "JOY OF MISSING OUT" },
+                { jp: "隣の芝は、電子ゴミ。", en: "OTHER BAGS ARE DUST" }, { jp: "インフルエンサーは嘘つき。", en: "GURUS LIE" },
+                { jp: "イナゴタワー建設中。", en: "PONZI TOWER" }, { jp: "その陽線は罠だ。", en: "GREEN TRAP" },
+                { jp: "どうせ売らないだろ。", en: "YOU HODL ANYWAY" }, { jp: "月には酸素がない。", en: "MOON HAS NO AIR" },
+                { jp: "その金、無かったもの。", en: "MONEY WAS ILLUSION" }, { jp: "乗り遅れたバスを追うな。", en: "DONT CHASE THE BUS" },
+                { jp: "次は必ず来る。", en: "NEXT TRAIN COMING" }, { jp: "チャートを閉じろ、死ぬぞ。", en: "CLOSE CHART OR DIE" },
+                { jp: "思考停止するな。", en: "DONT STOP THINKING" }, { jp: "お前はカモだ。", en: "YOU ARE THE SUCKER" },
+                { jp: "焼かれるのは常に後発組。", en: "LATECOMERS GET BURNED" }, { jp: "本当にその価値はあるか？", en: "IS IT WORTH IT?" },
+                { jp: "深呼吸しろ。", en: "TAKE A BREATH" }, { jp: "飛び乗り禁止。", en: "NO JUMPING IN" }
+            ]},
+            PANIC: { id: 'PANIC', label: 'ANTI-PANIC / 狼狽売り防止', timerLabel: { jp: '嵐が過ぎるまで', en: 'UNTIL CALM' }, words: [
+                { jp: "売らなきゃ損じゃない。", en: "1 BTC = 1 BTC" }, { jp: "バーゲンセール開催中。", en: "BUY THE DIP" },
+                { jp: "握力を試されている。", en: "DIAMOND HANDS" }, { jp: "恐怖で買え。", en: "BUY THE FEAR" },
+                { jp: "退場しなければ勝ち。", en: "SURVIVAL IS WIN" }, { jp: "現物は裏切らない。", en: "SPOT IS SAFE" },
+                { jp: "歴史は繰り返す。", en: "ZOOM OUT" }, { jp: "PCを閉じろ。", en: "CLOSE TERMINAL" },
+                { jp: "お前はクジラじゃない。", en: "YOU ARE PLANKTON" }, { jp: "嵐は過ぎ去る。", en: "STORM WILL PASS" },
+                { jp: "狼狽売りは養分の証。", en: "PANIC SELLING IS WEAK" }, { jp: "底は誰にも分からない。", en: "NO ONE KNOWS BOTTOM" },
+                { jp: "信念を持て。", en: "HAVE CONVICTION" }, { jp: "恐怖はチャンスだ。", en: "FEAR IS OPPORTUNITY" },
+                { jp: "まだ終わっていない。", en: "NOT OVER YET" }, { jp: "夜明け前が一番暗い。", en: "DARKEST BEFORE DAWN" },
+                { jp: "感情を殺せ。", en: "KILL EMOTION" }, { jp: "計画を思い出せ。", en: "REMEMBER THE PLAN" },
+                { jp: "ノイズを遮断せよ。", en: "BLOCK THE NOISE" }, { jp: "生き残れ。", en: "STAY ALIVE" }
+            ]},
+            BOREDOM: { id: 'BOREDOM', label: 'ANTI-BOREDOM / ポジポジ病防止', timerLabel: { jp: '好機が来るまで', en: 'UNTIL OPPORTUNITY' }, words: [
+                { jp: "待つのも相場。", en: "WAITING IS TRADE" }, { jp: "値動きはノイズ。", en: "PRICE IS NOISE" },
+                { jp: "現実に帰れ。", en: "TOUCH GRASS" }, { jp: "静観せよ。", en: "STAY NEUTRAL" },
+                { jp: "ポジポジ病は不治の病。", en: "OVERTRADING KILLS" }, { jp: "暇なら本を読め。", en: "READ A BOOK" },
+                { jp: "コイントスと同じだ。", en: "JUST GAMBLING" }, { jp: "チャートを見過ぎるな。", en: "IGNORE TICKS" },
+                { jp: "機械になれ。", en: "BE A MACHINE" }, { jp: "一喜一憂は課税対象。", en: "EMOTION IS TAXED" },
+                { jp: "何もしない勇気。", en: "COURAGE TO DO NOTHING" }, { jp: "退屈は利益の源泉。", en: "BOREDOM IS PROFIT" },
+                { jp: "資金を守れ。", en: "PROTECT CAPITAL" }, { jp: "チャンスを待て。", en: "WAIT FOR SETUP" },
+                { jp: "無理に動くな。", en: "DONT FORCE IT" }, { jp: "規律を守れ。", en: "DISCIPLINE" },
+                { jp: "それは投資か、ギャンブルか。", en: "INVEST OR GAMBLE?" }, { jp: "プロは待てる。", en: "PROS WAIT" },
+                { jp: "今日はPCを閉じろ。", en: "DAY OFF" }, { jp: "瞑想せよ。", en: "MEDITATE" }
+            ]}
+        };
+
+        const COMPLETION_MESSAGES = [
+            { jp: "月へ、行ってらっしゃい。", en: "SAFE TRAVELS TO THE MOON" },
+            { jp: "千里の道も一歩から。", en: "ONE SMALL STEP" },
+            { jp: "準備は整った。", en: "SYSTEMS GO" },
+            { jp: "幸運を祈る。", en: "GOOD LUCK" },
+            { jp: "冷静さを保て。", en: "STAY FROSTY" },
+            { jp: "規律こそが自由だ。", en: "DISCIPLINE IS FREEDOM" }
+        ];
+
+        const WORD_DURATION = 6000;
+        const TIMER_DURATION = 180;
+
+        // --- 🔠 DECODE TEXT ---
+        const DecipherText = ({ text, trigger }) => {
+            const [display, setDisplay] = useState("");
+            useEffect(() => {
+                let iteration = 0;
+                let active = true;
+                const interval = setInterval(() => {
+                    if (!active) return;
+                    setDisplay(text.split("").map((letter, index) => {
+                        if (index < iteration) return text[index];
+                        return "||//--.."[Math.floor(Math.random() * 8)];
+                    }).join(""));
+                    if (Math.random() > 0.9) playSound('tick');
+                    if (iteration >= text.length) clearInterval(interval);
+                    iteration += 1 / 2;
+                }, 30);
+                return () => { active = false; clearInterval(interval); };
+            }, [text, trigger]);
+            return <span>{display}</span>;
+        };
+
+        // --- 📱 MAIN APP ---
+        function App() {
+            const [currentMode, setCurrentMode] = useState('LEGENDS');
+            const [lang, setLang] = useState('JP');
+            const [wordIndex, setWordIndex] = useState(0); 
+            const [trigger, setTrigger] = useState(0);
+            const [started, setStarted] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(TIMER_DURATION * 1000);
+            const [finished, setFinished] = useState(false);
+            const [isGlitching, setIsGlitching] = useState(false);
+
+            useEffect(() => {
+                document.body.classList.add('loaded');
+            }, []);
+
+            const getNextRandomIndex = useCallback((currentIndex, length) => {
+                if (length <= 1) return 0;
+                let next;
+                do { next = Math.floor(Math.random() * length); } while (next === currentIndex);
+                return next;
+            }, []);
+
+            const nextWord = useCallback(() => {
+                const words = MODES[currentMode].words;
+                setWordIndex(prev => getNextRandomIndex(prev, words.length));
+                setTrigger(prev => prev + 1);
+                playSound('switch');
+            }, [currentMode, getNextRandomIndex]);
+
+            useEffect(() => {
+                if (!started || finished) return;
+                const timer = setInterval(() => {
+                    nextWord();
+                }, 6000);
+                return () => clearInterval(timer);
+            }, [started, finished, nextWord]);
+
+            useEffect(() => {
+                if (!started || finished) return;
+                const interval = setInterval(() => {
+                    setTimeLeft(prev => {
+                        if (prev <= 17) {
+                            setFinished(true);
+                            playSound('complete');
+                            return 0;
+                        }
+                        return prev - 17;
+                    });
+                }, 17);
+                return () => clearInterval(interval);
+            }, [started, finished]);
+
+            const switchMode = (modeKey) => {
+                if (currentMode === modeKey) return;
+                setIsGlitching(true);
+                playSound('glitch');
+                setTimeout(() => {
+                    setCurrentMode(modeKey);
+                    setWordIndex(Math.floor(Math.random() * MODES[modeKey].words.length));
+                    setTrigger(prev => prev + 1);
+                    setTimeout(() => setIsGlitching(false), 200);
+                }, 100);
+            };
+
+            const toggleLang = (e) => {
+                e.stopPropagation();
+                setLang(prev => prev === 'JP' ? 'EN' : 'JP');
+                playSound('switch');
+            };
+
+            const manualSkip = () => {
+                if (!started || finished) return;
+                nextWord();
+                playSound('tick');
+            };
+
+            const formatTime = (ms) => {
+                const totalSeconds = Math.floor(ms / 1000);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                const millis = Math.floor((ms % 1000) / 10);
+                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(2, '0')}`;
+            };
+
+            const activeWords = MODES[currentMode].words;
+            const safeIndex = wordIndex % activeWords.length;
+            const activeWord = activeWords[safeIndex];
+            const completionMsg = COMPLETION_MESSAGES[Math.floor(Math.random() * COMPLETION_MESSAGES.length)];
+
+            const mainText = lang === 'JP' ? activeWord.jp : activeWord.en;
+            const subText = lang === 'JP' ? activeWord.en : activeWord.jp;
+            const mainFontClass = lang === 'JP' ? 'font-mincho tracking-normal' : 'font-sans tracking-tight font-black';
+            const subFontClass = lang === 'JP' ? 'font-sans font-bold tracking-[0.2em]' : 'font-mincho tracking-widest font-bold';
+            const timerLabel = lang === 'JP' ? MODES[currentMode].timerLabel.jp : MODES[currentMode].timerLabel.en;
+
+            return (
+                <div className={`w-full h-full flex flex-col justify-between relative transition-colors duration-100 ${isGlitching ? 'invert-mode' : ''}`}>
+                    
+                    {/* LANG BUTTON (Fixed Top Right) */}
+                    {started && (
+                        <div className="absolute top-6 right-6 z-50">
+                            <button onClick={toggleLang} className="px-4 py-2 bg-white border-2 border-gray-100 text-xs font-sans font-bold tracking-widest hover:bg-black hover:text-white transition-colors rounded-sm shadow-sm cursor-pointer">
+                                {lang === 'JP' ? 'EN' : 'JP'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* START SCREEN (Centered) */}
+                    {!started && (
+                        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-4 bg-[#FAFAFA]">
+                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }} className="text-center px-4">
+                                <h1 className="font-mincho font-extrabold text-5xl md:text-8xl mb-12 text-black leading-tight tracking-tight">
+                                    FOMOに効く<br/>100の言葉
+                                </h1>
+                                <button onClick={() => { setStarted(true); playSound('switch'); }} className="group relative px-12 py-4 bg-transparent border-2 border-black overflow-hidden cursor-pointer inline-block">
+                                    <span className="relative z-10 font-mincho font-bold text-lg tracking-[0.2em] group-hover:text-white transition-colors duration-300">見てみる</span>
+                                    <div className="absolute inset-0 bg-black transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 ease-out"></div>
+                                </button>
+                                <p className="font-sans font-bold text-[10px] tracking-[0.4em] text-gray-400 mt-12">ANTI-FOMO PROTOCOL</p>
+                            </motion.div>
+                        </div>
+                    )}
+
+                    {/* --- MAIN STRUCTURE (Flex Column with Spacing) --- */}
+                    {started && (
+                        <>
+                            {/* TOP: Timer & Info (Fixed Height Block) */}
+                            <div className="flex-none pt-12 pb-4 w-full flex flex-col items-center justify-start z-30">
+                                <div className="font-mincho text-[10px] tracking-[0.4em] mb-2 text-gray-400 opacity-80">
+                                    {timerLabel}
+                                </div>
+                                <div className="font-mono text-xl md:text-2xl tracking-[0.3em] text-black font-light tabular-nums">
+                                    {formatTime(timeLeft)}
+                                </div>
+                            </div>
+
+                            {/* MIDDLE: Content (Takes Remaining Space) */}
+                            <div className="flex-grow flex flex-col justify-center items-center relative z-20 w-full px-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={manualSkip}>
+                                <AnimatePresence mode="wait">
+                                    {!finished ? (
+                                        <motion.div key={`${currentMode}-${trigger}-${lang}`} initial={{ opacity: 0, filter: "blur(5px)" }} animate={{ opacity: 1, filter: "blur(0px)" }} exit={{ opacity: 0, filter: "blur(5px)" }} transition={{ duration: 0.2 }} className={`flex flex-col items-center ${isGlitching ? 'glitch-active' : ''}`}>
+                                            
+                                            {/* No. */}
+                                            <div className="font-sans font-black text-xs tracking-[0.4em] mb-6 text-chart-green opacity-90">
+                                                NO. {String(safeIndex + 1).padStart(2, '0')}
+                                            </div>
+                                            
+                                            {/* Main Words */}
+                                            <h1 className={`${mainFontClass} text-5xl md:text-7xl lg:text-8xl leading-tight text-black text-center mb-6 break-words`}>
+                                                <DecipherText text={mainText} trigger={trigger} />
+                                            </h1>
+                                            
+                                            {/* Sub Words */}
+                                            <p className={`${subFontClass} text-xs md:text-sm text-gray-400 uppercase`}>
+                                                {subText}
+                                            </p>
+
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div key="finished" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+                                            <h1 className="font-mincho font-extrabold text-5xl md:text-7xl text-black mb-6">
+                                                <DecipherText text={lang === 'JP' ? completionMsg.jp : completionMsg.en} />
+                                            </h1>
+                                            <p className="font-sans font-bold text-sm text-gray-400 tracking-[0.2em] uppercase">
+                                                {lang === 'JP' ? completionMsg.en : completionMsg.jp}
+                                            </p>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            {/* BOTTOM: Buttons (Fixed Height Block) */}
+                            <div className="flex-none pb-12 pt-4 w-full flex justify-center items-end z-30">
+                                <div className="pointer-events-auto">
+                                    {!finished ? (
+                                        <div className="flex flex-wrap justify-center gap-3 px-4">
+                                            {Object.keys(MODES).map((key) => (
+                                                <button key={key} onClick={(e) => { e.stopPropagation(); switchMode(key); }} className={`font-sans font-bold text-[10px] md:text-xs tracking-[0.1em] px-6 py-4 transition-all border rounded-sm ${currentMode === key ? 'bg-black text-white border-black' : 'bg-white/90 text-gray-400 border-gray-200 hover:border-black hover:text-black shadow-sm'}`}>
+                                                    {MODES[key].label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => window.location.reload()} className="font-sans font-bold text-xs tracking-[0.2em] px-10 py-4 border border-gray-200 bg-white text-gray-400 hover:text-black hover:border-black transition-all rounded-sm">
+                                            REBOOT SYSTEM
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
 </html>
